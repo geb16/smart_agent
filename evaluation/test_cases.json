@@ -1,0 +1,50 @@
+[
+  {
+    "id": "math_add",
+    "input": "What is 12 + 8?",
+    "expected_action": "tool",
+    "expected_tool": "tool_add",
+    "expected_final_contains": "20"
+  },
+  {
+    "id": "rag_refund_policy",
+    "input": "What is the refund policy?",
+    "expected_action": "rag",
+    "expected_final_contains": "refund"
+  },
+  {
+    "id": "weather_check",
+    "input": "What's the weather in London?",
+    "expected_action": "tool",
+    "expected_tool": "tool_weather",
+    "expected_final_contains": "London"
+  },
+   {
+    "id": "math_multiply",
+    "input": "What is 7 multiplied by 6?",
+    "expected_action": "tool",
+    "expected_tool": "tool_multiply",
+    "expected_final_contains": "42"
+   },
+   {
+    "id": "compound_interest",
+    "input": "What is the compound interest on $1000 at 5% compounded quarterly, for 2 years?",  
+    "expected_action": "tool",
+    "expected_tool": "tool_calculate_compound_interest",
+    "expected_final_contains": "104.5"
+   },
+  {
+    "id": "general_knowledge",
+    "input": "Who wrote 'Pride and Prejudice'?",
+    "expected_action": "rag",
+    "expected_final_contains": "Austen"
+  },
+  {
+    "id": "multi step reasoning",
+    "input": "(5+7) * 3",
+    "expected_action": "tool",
+    "expected_tool": "tool_multiply",
+    "expected_final_contains": "36" 
+
+  }
+]
