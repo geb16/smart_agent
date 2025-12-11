@@ -306,74 +306,84 @@ class MultiAgentOrchestrator:
         self.verifier_agent = VerifierAgent()
         
         
-
     def handle(self, user_input: str) -> str:
+
+        """
+        High-level orchestrator:
+        1) Sanitize input
+        2) Extract preferences
+        3) Planner builds workflow
+        4) Executor runs tools + RAG
+        5) Verifier corrects draft
+        6) Safety Supervisor final check
+        """
+        # --------------------------------------------------
+        # IMPORT SAFETY AND PREFERENCE MODULES
+        # --------------------------------------------------
+        
         from agent.memory.preference_extractor import extract_preferences
-        #0️⃣ Extract preferences BEFORE planning
+        from agent.safety_gardrails.sanitizer import sanitize_user_input
+        from agent.safety_gardrails.safety_superviser import safety_supervisor
+        # --------------------------------------------------
+        # 1️⃣ Safety gate (sanitizer)
+        # --------------------------------------------------
+        cleaned = sanitize_user_input(user_input)
+
+        # If sanitizer returns a warning → stop the agent pipeline
+        if cleaned.startswith("⚠️"):
+            # Abort pipeline immediately on unsafe input
+            return cleaned
+        
+        # Now the input is safe
+        user_input = cleaned
+
+
+        # --------------------------------------------------
+        # 2️⃣ Extract global user preferences (only from safe input)
+        # --------------------------------------------------
         extracted = extract_preferences(user_input)
         if extracted:
             for k, v in extracted.items():
                 self.ltm.set_pref(k, v)
 
-        # 1️⃣ Planner: build workflow using STM + LTM + prefs
-        # 🔖 UPDATED: let PlannerAgent build memory_text internally
+
+        # --------------------------------------------------
+        # 3️⃣ Planner: builds workflow steps using all memory
+        # --------------------------------------------------
         steps = self.planner_agent.plan(user_input)
-        # integrate LTM prefs into planning context
 
-        # 2️⃣ Executor: run tools + RAG
+
+        # --------------------------------------------------
+        # 4️⃣ Executor: RAG + Tools execution
+        # --------------------------------------------------
         workflow_results, draft = self.executor_agent.execute(user_input, steps)
-        
-        # 3️⃣ Verifier: approve or correct
+
+
+        # ---------------------------------------------------------------------------
+        # 5️⃣ Verifier: ensures correctness + final answer(Correct or Approcve Draft)
+        # ---------------------------------------------------------------------------
         final = self.verifier_agent.verify(user_input, workflow_results, draft)
+
+        # --------------------------------------------------------------------------
+        # 6️⃣ Safety Supervisor: (POST-PROCESS SAFETY)final safety check on the final answer
+        # --------------------------------------------------------------------------
+        safe_report = safety_supervisor(user_input, final)
+        # safe_report = {
+        # "safe": true/false, 
+        # "reason": "....", 
+        # "final": 2final sanitizied output"
+        # }  
+
+        if not safe_report.get("safe", False):
+            # Superviser blocks unsafe or ungrounded final answers
+            reason = safe_report.get("reason", "Content flagged.")
+            safe_final = safe_report.get("final", "The system cannot provide this answer safely.")
+            return f"⚠️  Output blocked by safety supervisor:\nReason: {reason}\n{safe_final}"
         
-        # Optional future extension: store final + verifier_status in EpisodicMemory here)
-       # self.epi.store(user_input, final)   
+        #Otherwise output is safe
+        return safe_report["final"]
+
         
-        return final
+        # Optional: Store episodic record
+        # self.epi.store(user_input, final)
 
-
-
-# 🔖🈁🔴 For later use
-
-# --- Suggestion Agent ---
-class SuggestionAgent:
-    """Generates next-sentence suggestions based on STM, LTM, and episodic memory."""
-
-    def __init__(self, stm, ltm, epi):
-        self.stm = stm
-        self.ltm = ltm
-        self.epi = epi
-
-    def suggest(self, user_input: str) -> str:
-        """
-        Returns a short suggestion based on similar past queries or preferences.
-        """
-        past = self.stm.as_text()
-
-        similar = self.epi.retrieve_similar(user_input, k=1)
-        ltm_facts = self.ltm.recall(user_input, k=1)
-
-        prompt = f"""
-        User typed an incomplete query: {user_input}
-
-        Recent conversation:
-        {past}
-
-        Similar queries from episodic memory:
-        {similar}
-
-        Relevant long-term memory:
-        {ltm_facts}
-
-        Suggest the next likely thing the user wants to ask.
-        Keep the suggestion short, not intrusive, and relevant.
-        Do NOT complete the whole query, just offer a subtle suggestion.
-        """
-
-        resp = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            temperature=0.0,
-            messages=[{"role": "system", "content": prompt}]
-        )
-
-        return resp.choices[0].message.content.strip()
