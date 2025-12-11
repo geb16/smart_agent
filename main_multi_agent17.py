@@ -1,6 +1,6 @@
 # main_multi_agent.py
 
-from agent.multi_agent import  MultiAgentOrchestrator
+from agent.multi_agent_V2 import  MultiAgentOrchestrator
 
 if __name__ == "__main__":
     orchestrator = MultiAgentOrchestrator()
