@@ -10,7 +10,8 @@ from agent.config import client, OPENAI_MODEL
 # Add long term memory 
 from agent.memory.long_term import LongTermMemory
 
-
+# ---------------------------------------------------------
+#   Constants: Valid Actions + Tools + System Prompt
 VALID_ACTIONS = {"rag", "tool", "direct_answer"}
 VALID_TOOLS = {
     "tool_add",
@@ -22,7 +23,7 @@ VALID_TOOLS = {
     "tool_slack_notify",
     "tool_calculate_compound_interest",
 }
-#🦺 dangerous tools excluded for safety
+#🦺:Safety: explicitly allow only approved tools
 ALLOWED_TOOLS = {
     "tool_add": True,
     "tool_subtract": True,
@@ -182,26 +183,40 @@ class WorkflowPlanner:
 
     def _validate_and_norm(self, s: Dict[str, Any]) -> Dict[str, Any]:
 
-        # Normalize action names first:
+      
         # that means if action is a tool name, convert to action: tool, tool_name: <name>
         raw_action = s.get("action")
-
+        # -----------------------------------------------------------------
+        # 1️⃣ Normaize "tool_xxx" action → ("tool", tool_name)
+        # -----------------------------------------------------------------
         if raw_action in VALID_TOOLS:
             s["tool_name"] = raw_action
             s["action"] = "tool"
         
+        # -----------------------------------------------------------------
+        # 2️⃣ Re-read normalized action + validate
+        # -----------------------------------------------------------------
         action = s.get("action") # ✅ RE-READ normalized action
         
         #✅ Now validate correctly
         if action not in VALID_ACTIONS:
             raise ValueError(f"Invalid action from planner: {action}")
         
-        #  Safeguard against disallowed tools
-        #🦺 action IS KEY IN ALLOWED_TOOLS and its values is bool
+        # ----------------------------------------------------------------
+        # 3️⃣ 🦺 Tool safety checks(only if tool step)
+        # ----------------------------------------------------------------
+        if action == "tool":
+            tool_name = s.get("tool_name")
 
-        for action in ALLOWED_TOOLS.items():
-            if action == s.get("tool_name") and not ALLOWED_TOOLS[action]:
-                raise ValueError(f"Disallowed tool selected by planner: {action}")
+            # ---- Ensure the planner provided a tool_name ---
+            if not tool_name:
+                raise ValueError("Planner prodced a tool step with no tool_name")
+            # ---- Ensure tools exists in the system -----
+            if tool_name not in VALID_TOOLS:
+                raise ValueError(f"Unknown tool requested: {tool_name}")
+            # ---- Ensure tool is explicitly allowed for safety -----
+            if not ALLOWED_TOOLS.get(tool_name, False): 
+                raise ValueError(f"Disallowed tool selected by planner: {tool_name}")
 
         base = {
             "thought": s.get("thought"), # This preserves reasoning for logging/debugging
