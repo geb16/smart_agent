@@ -3,6 +3,8 @@ import chromadb
 from chromadb.config import Settings
 from agent.config import client, EMBEDDING_MODEL
 from pathlib import Path
+from functools import lru_cache
+from typing import List, Dict, Any
 
 # Root of the project(auto-detect based on this file's location)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -15,6 +17,7 @@ class RagRetriever:
     """
     Agentic RAG retriever: 
     - deterministic
+    -
     - returns structured evidence for Verifier
     - supports semantic relevance filtering
     - compatible with the agentic workflow (Planner → Executor → Verifier)
@@ -40,26 +43,52 @@ class RagRetriever:
             return self._client.create_collection(COLLECTION_NAME)
 
     # ----------------------------------------------------
-    # Embedding
+    # Embedding(raw)
     # ----------------------------------------------------
-    def _embed(self, text: str) -> list[float]:
+    def _embed_raw(self, text: str) -> list[float]:
+        """
+        Low-level embedding call to OpenAI.
+        Should *never* be called directly from retrieval.
+        """
         resp = client.embeddings.create(
             model=EMBEDDING_MODEL,
             input=text,                    # <--- upgraded (no list wrapper)
             encoding_format="float",
         )
         return resp.data[0].embedding
+    
+       # ----------------------------------------------------
+    # 24.1.B — Cached Embedding
+    # ----------------------------------------------------
+    @lru_cache(maxsize=4096)
+    def _embed_cached(self, text: str) -> tuple:
+        """
+        Cached embedding result (tuple so LRU cache can hash it).
+        Called by retrieve().
+        """
+        emb = self._embed_raw(text)
+        # Convert list → tuple for caching key stability
+        return tuple(emb)
+        
+        
+    def _embed(self, text: str) -> List[float]:
+        """
+        Public embedding method used by retrieval.
+        Returns a list but caches internally as tuple.
+        """
+        return list(self._embed_cached(text))
 
     # ----------------------------------------------------
     # Retrieval (Agentic)
     # ----------------------------------------------------
     def retrieve(self, query: str, top_k: int = 5) -> dict:
+        # ----- Ensure DB exists -----
         try:
             total_docs = self.collection.count()
         except Exception:
             self.collection = self._ensure_collection()
             total_docs = self.collection.count()
-
+        # ----- empty Db → early return -----
         if total_docs == 0:
             return {
                 "query": query,
@@ -67,10 +96,10 @@ class RagRetriever:
                 "context": "Knowledge base is empty. Run rag_prep.py to populate rag_db."
             }
 
-        # Encode query
+        # ---- 1. get cached embedding -----
         q_emb = self._embed(query)
 
-        # Query vector store
+        # ---- 2. query chromaDB -----
         result = self.collection.query(
             query_embeddings=[q_emb],
             n_results=top_k,
@@ -81,6 +110,7 @@ class RagRetriever:
         metas = result.get("metadatas", [[]])[0]
         dists = result.get("distances", [[]])[0]
 
+        # ---- 3. filter by relevance & structure -----
         matches = []
         for text, meta, dist in zip(docs, metas, dists):
 
@@ -98,7 +128,7 @@ class RagRetriever:
                 "distance": float(dist),
             })
 
-        # If filtering removed everything → fallback to raw docs
+        #----- If filtering removed everything → fallback to raw docs -----
         if not matches:
             return {
                 "query": query,
@@ -106,7 +136,7 @@ class RagRetriever:
                 "context": f"No relevant information found for: {query}"
             }
 
-        # Build context for LLM draft synthesis
+        # -----evidence block for LLM -----
         context_block = "\n\n".join(m["text"] for m in matches)
 
         return {
