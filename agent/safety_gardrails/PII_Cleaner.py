@@ -13,3 +13,4 @@ def scrub_output(text: str) -> str:
     for p in PII_PATTERNS:
         cleaned = re.sub(p, "[REDACTED]", cleaned)
     return cleaned
+
