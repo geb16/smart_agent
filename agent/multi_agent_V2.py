@@ -1,73 +1,17 @@
 # agent/multi_agent.py
 
 from __future__ import annotations
-
 import json
-
-from typing import Any, List, Optional
-
-
-from agent.config import client, OPENAI_MODEL
 from agent.planners.planner_m16 import WorkflowPlanner
-from agent.executors.ExecutorAgent_m19 import ExecutorAgent
+from agent.planners.planner_agent import PlannerAgent
+from agent.executors.ExecutorAgent_V24 import ExecutorAgent
 from agent.verifiers.verifier_agent import VerifierAgent
+
 
 from agent.memory.short_term import ShortTermMemory
 from agent.memory.long_term import LongTermMemory
 from agent.memory.episodic import EpisodicMemory
 
-
-class PlannerAgent:
-    """High-level planning agent - delegates to WorkflowPlanner."""
-
-    def __init__(self, planner, stm, ltm, epi) -> None:
-        self.planner = planner
-        self.stm = stm
-        self.ltm = ltm
-        self.epi = epi
-
-    def plan(self, user_input: str, memory_text: Optional[str] = None):
-        
-        if memory_text is None:
-
-            # ---- 1. STM: short-term context ----
-            stm_text = self.stm.as_text() or ""
-
-            # ---- 2. Preferences ----
-            prefs = self.ltm.all_prefs()
-            prefs_text = json.dumps(prefs, ensure_ascii=False) if prefs else ""
-
-            # ---- 3. LTM: semantic recall ----
-            ltm_chunks = self.ltm.recall(user_input) or []
-            ltm_text = "\n".join(ltm_chunks)
-
-            # ---- 4. ETM: episodic recall ----
-            epi_chunks = self.epi.retrieve_similar(user_input, k=3) or []
-            epi_text = "\n".join(epi_chunks)
-
-            # ---- Combine all memory sources ----
-            memory_chunks = [
-                stm_text,
-                prefs_text,
-                ltm_text,
-                epi_text,
-            ]
-
-            memory_text = "\n".join(t for t in memory_chunks if t.strip())
-
-        try:
-            validated_steps = self.planner.plan(user_input, memory_text)
-        except ValueError:
-            validated_steps = [
-                {
-                    "action": "rag",
-                    "tool_name": None,
-                    "tool_args": {},
-                    "rag_query": user_input,
-                }
-            ]
-
-        return validated_steps
 
 
 
