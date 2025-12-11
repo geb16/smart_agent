@@ -1,4 +1,4 @@
-
+# file: level2/module17/smart_agent/agent/safety_gardrails/safety_superviser.py
 from agent.config import client, OPENAI_MODEL
 from typing import Any, Dict
 import json
@@ -32,3 +32,8 @@ Return STRICT JSON:
         ]
     )
     return json.loads(resp.choices[0].message.content)
+
+
+# Example usage:
+# result = safety_supervisor("User input here", "Final answer here")
+# print(result)
