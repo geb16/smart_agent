@@ -12,7 +12,7 @@ from agent.config import client, OPENAI_MODEL
 from agent.tools import TOOL_REGISTRY
 from agent.rag import RagRetriever
 from agent.planners.planner_m16 import WorkflowPlanner
-#from agent.ExecutorAgent_m19 import ExecutorAgent
+from agent.ExecutorAgent_m19 import ExecutorAgent
 
 from agent.memory.short_term import ShortTermMemory
 from agent.memory.long_term import LongTermMemory
@@ -73,7 +73,7 @@ class PlannerAgent:
 
 
 # --- Executor Agent ---
-class ExecutorAgent:
+class ExecutorAgent_1:
     """Executes planner steps using tools + RAG, and produces a draft answer."""
 
     def __init__(self, stm: ShortTermMemory, ltm: LongTermMemory, epi: EpisodicMemory) -> None:
