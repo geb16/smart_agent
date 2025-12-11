@@ -322,8 +322,9 @@ class MultiAgentOrchestrator:
         # --------------------------------------------------
         
         from agent.memory.preference_extractor import extract_preferences
-        from agent.safety_gardrails.sanitizer import sanitize_user_input
-        from agent.safety_gardrails.safety_superviser import safety_supervisor
+        from agent.safety_guardrails.sanitizer import sanitize_user_input
+        from agent.safety_guardrails.safety_superviser import safety_supervisor
+        
         # --------------------------------------------------
         # 1️⃣ Safety gate (sanitizer)
         # --------------------------------------------------
