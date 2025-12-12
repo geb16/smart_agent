@@ -39,7 +39,7 @@ class EpisodicMemory:
 
         tools = [
             s.get("tool_name")
-            for s in steps
+            for s in steps 
             if isinstance(s, dict) and s.get("action") == "tool"
         ]
 

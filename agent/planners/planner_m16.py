@@ -80,7 +80,7 @@ Rules:
   {"action": "tool", "tool_name": "tool_calculate_compound_interest",
    "tool_args": {"principal": float, "rate": decimal, "times_compounded": int, "years": float}}
 
-   - Any request to "notify", "send message", "alert", "ping someone", 
+- Any request to "notify", "send message", "alert", "ping someone", 
   or "post update" → use:
   {
     "action": "tool",
@@ -141,7 +141,7 @@ class WorkflowPlanner:
             )
 
             data = json.loads(resp.choices[0].message.content)
-            raw_steps = data.get("steps", [])
+            raw_steps = data.get("steps", []) 
 
         except Exception as e:
             raise RuntimeError(f"[Planner LLM Failure] {e}")

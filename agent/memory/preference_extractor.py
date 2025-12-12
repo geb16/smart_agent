@@ -11,8 +11,8 @@ SYSTEM_PROMPT = """
 You extract ONLY long-term preferences that affect FUTURE interactions.
 
 Correct mappings:
-- "from now on, use fahrenheit" → {"key": "temperature_unit", "value": "fahrenheit"|°F}
-- "use celsius by default" → {"key": "temperature_unit", "value": "celsius"|°C}
+- "from now on, use fahrenheit" → {"key": "temperature_unit", "value": "fahrenheit"|"°F"}
+- "use celsius by default" → {"key": "temperature_unit", "value": "celsius"|"°C"}
 - "always answer in spanish" → {"key": "language", "value": "spanish"}
 - "set my default city to london" → {"key": "default_city", "value": "london"}
 - "I prefer metric units" → {"key": "measurement_system", "value": "metric"}
