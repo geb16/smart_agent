@@ -97,7 +97,7 @@ class RagRetriever:
                     "text": str,
                     "metadata": dict,
                     "distance": float,
-                    "similarity": float,  # 0..1, higher is better
+                    "similarity": float,  # 0..→..1, higher is better(0.85)
                 },
                 ...
             ],
