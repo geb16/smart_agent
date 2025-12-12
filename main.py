@@ -1,6 +1,6 @@
 # main.py
 #from agent.planner import WorkflowPlanner
-from agent.planner_m16 import WorkflowPlanner
+from agent.planners.planner_m16 import WorkflowPlanner
 from agent.agent_core import WorkflowAgent
 
 # whe can now create different planners and agents as needed
