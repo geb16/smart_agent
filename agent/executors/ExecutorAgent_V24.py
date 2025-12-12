@@ -96,19 +96,19 @@ class ExecutorAgent:
 
         # TOOL execution (single or batch)
         if action == "tool":
-            tool_name_field = step.get("tool_name")
+            tool_name = step.get("tool_name")
             args = step.get("tool_args") or {}
 
             # Batch tool execution
-            if isinstance(tool_name_field, list):
+            if isinstance(tool_name, list):
                 try:
                     results = asyncio.run(
-                        self._run_tools_parallel(tool_name_field, args)
+                        self._run_tools_parallel(tool_name, args)
                     )
                 except RuntimeError:
                     # Fallback for already-running event loop
                     results = []
-                    for name in tool_name_field:
+                    for name in tool_name:
                         sub_step = {
                             "action": "tool",
                             "tool_name": name,
@@ -116,10 +116,10 @@ class ExecutorAgent:
                         }
                         results.append(self._run_single_step(sub_step, user_input))
 
-                return {"type": "tool_batch_result", "tools": tool_name_field, "results": results}
+                return {"type": "tool_batch_result", "tools": tool_name, "results": results}
 
             # Single tool call
-            name = (tool_name_field or "").strip()
+            name = (tool_name or "").strip()
             tool_fn = TOOL_REGISTRY.get(name)
 
             if not tool_fn:
