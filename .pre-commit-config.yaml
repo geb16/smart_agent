@@ -15,7 +15,6 @@ repos:
             "."
           ]
 
-
   #2️⃣ Sort imports before formatting
   - repo: https://github.com/PyCQA/isort
     rev: 5.13.2
