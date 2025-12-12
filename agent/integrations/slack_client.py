@@ -1,61 +1,49 @@
-# # agent/integrations/slack_client.py
-# from __future__ import annotations
+from __future__ import annotations
 
-# import os
-# import json
-# import logging
-# from typing import Optional
+import logging
+from typing import Dict
 
-# import requests
+import requests
 
-# logger = logging.getLogger(__name__)
+from agent.config import SLACK_WEBHOOK_URL
+
+logger = logging.getLogger(__name__)
 
 
-# class SlackClient:
-#     """
-#     Minimal Slack webhook client.
-#     You can point this to:
-#       - a real Slack incoming webhook URL, or
-#       - a local FastAPI mock endpoint for dev/testing.
-#     """
+class SlackClient:
+    """
+    Slack Incoming Webhook client (REAL).
+    Sends messages directly to Slack channels.
+    """
 
-#     def __init__(self, webhook_url: Optional[str] = None) -> None:
-#         self.webhook_url = webhook_url or os.getenv("SLACK_WEBHOOK_URL")
-#         if not self.webhook_url:
-#             raise RuntimeError("SLACK_WEBHOOK_URL is not set")
+    def __init__(self) -> None:
+        if not SLACK_WEBHOOK_URL:
+            raise RuntimeError("SLACK_WEBHOOK_URL is not set")
 
-#     def send_message(
-#         self, 
-#         text: str, 
-#         username: str = "SmartAgent", 
-#         icon_emoji: str = ":robot_face:"
-#     ) -> dict:
-#         """
-#         Send a message to the configured webhook.
-#         Returns a dict with status and response text.
-#         """
-#         payload = {
-#             "text": text,
-#             "username": username,
-#             "icon_emoji": icon_emoji,
-#         }
+        self.webhook_url = SLACK_WEBHOOK_URL
 
-#         try:
-#             resp = requests.post(
-#                 self.webhook_url,
-#                 data=json.dumps(payload),
-#                 headers={"Content-Type": "application/json"},
-#                 timeout=5,
-#             )
-#         except Exception as e:
-#             logger.exception("Slack webhook request failed")
-#             return {"ok": False, "error": str(e)}
+    def send_message(
+        self,
+        text: str,
+        username: str = "SmartAgent",
+        icon_emoji: str = ":robot_face:",
+    ) -> Dict[str, object]:
+        payload = {
+            "text": text,
+            "username": username,
+            "icon_emoji": icon_emoji,
+        }
 
-#         if resp.status_code != 200:
-#             return {
-#                 "ok": False,
-#                 "status_code": resp.status_code,
-#                 "response": resp.text,
-#             }
+        try:
+            resp = requests.post(
+                self.webhook_url,
+                json=payload,   # ✅ correct way
+                timeout=5,
+            )
+            resp.raise_for_status()
+        except requests.RequestException as exc:
+            logger.exception("Slack webhook call failed")
+            return {"ok": False, "error": str(exc)}
 
-#         return {"ok": True, "status_code": resp.status_code, "response": resp.text}
+        # Slack returns plain text "ok"
+        return {"ok": True, "response": resp.text}

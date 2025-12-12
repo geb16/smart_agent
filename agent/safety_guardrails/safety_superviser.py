@@ -1,6 +1,6 @@
-# file: level2/module17/smart_agent/agent/safety_gardrails/safety_superviser.py
+# agent/safety_gardrails/safety_superviser.py
 from agent.config import client, OPENAI_MODEL
-from typing import Any, Dict
+
 import json
 
 
@@ -15,7 +15,7 @@ def safety_supervisor(user_input, final_answer):
                 "role": "system",
                 "content": """
 You are a compliance and safety auditor.
-Check if final_answer is safe, grounded, non-harmful, and free of PII.
+Check if final_answer is safe, grounded, non-harmful, and facts-based given the user_input.
 
 Return STRICT JSON:
 {
