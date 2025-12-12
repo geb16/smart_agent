@@ -173,11 +173,10 @@ class ExecutorAgent:
     # 🔹 Synthesize a Draft Answer
     # -------------------------------------------------------
     
-    # Adding in runtime truncation to avoid exceeding token limits
-    
     def _synthesise_draft(self, user_input: str, step_results: List[Any]) -> str:
         
         # combined = json.dumps(step_results, indent=2, ensure_ascii=False)
+        # ↑↓Adding in runtime truncation to avoid exceeding token limits
         
         combined = truncate_json(step_results)
 

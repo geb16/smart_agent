@@ -182,10 +182,27 @@ class WorkflowPlanner:
         
 
     def _validate_and_norm(self, s: Dict[str, Any]) -> Dict[str, Any]:
-
-      
+        
         # that means if action is a tool name, convert to action: tool, tool_name: <name>
         raw_action = s.get("action")
+
+        # ---------------------------------------------------------
+        # 0️⃣ Normalize RAG steps immediately
+        # ---------------------------------------------------------
+        if raw_action == "rag":
+            rag_query = s.get("rag_query")
+            if not rag_query:
+                raise ValueError("RAG action requires explicit rag_query")
+
+            return {
+                "thought": s.get("thought"),
+                "action": "rag",
+                "tool_name": None,
+                "tool_args": {},
+                "rag_query": rag_query,
+            }
+
+
         # -----------------------------------------------------------------
         # 1️⃣ Normaize "tool_xxx" action → ("tool", tool_name)
         # -----------------------------------------------------------------
@@ -210,47 +227,32 @@ class WorkflowPlanner:
 
             # ---- Ensure the planner provided a tool_name ---
             if not tool_name:
-                raise ValueError("Planner prodced a tool step with no tool_name")
+                raise ValueError("Tool step missing tool_name")
+            
             # ---- Ensure tools exists in the system -----
             if tool_name not in VALID_TOOLS:
                 raise ValueError(f"Unknown tool requested: {tool_name}")
+            
             # ---- Ensure tool is explicitly allowed for safety -----
             if not ALLOWED_TOOLS.get(tool_name, False): 
                 raise ValueError(f"Disallowed tool selected by planner: {tool_name}")
 
-        base = {
-            "thought": s.get("thought"), # This preserves reasoning for logging/debugging
-            "action": action,
-            "tool_name": s.get("tool_name"),
-            "tool_args": s.get("tool_args") or {},
-            "rag_query": s.get("rag_query"),
-        }
+            return {
+                "thought": s.get("thought"), # This preserves reasoning for logging/debugging
+                "action": "tool",
+                "tool_name": tool_name,
+                "tool_args": s.get("tool_args") or {},
+                "rag_query": None
+            }
 
-        # ---- TOOL ENFORCEMENT ----
-        if action == "tool":
-            tool_name = base["tool_name"]
-
-            # app must not crash on invalid tool usage
-            # put in try catch in orchestrator instead
-
-            if tool_name not in VALID_TOOLS:
-                raise ValueError(f"Invalid tool selected by planner: {tool_name}")
-            
-                
-            base["rag_query"] = None
-
-        # ---- RAG ENFORCEMENT ----
-        elif action == "rag":
-            if not base["rag_query"]:
-                raise ValueError("RAG action requires explicit rag_query")
-
-            base["tool_name"] = None
-            base["tool_args"] = {}
-
-        # ---- DIRECT ANSWER ----
-        elif action == "direct_answer":
-            base["tool_name"] = None
-            base["tool_args"] = {}
-            base["rag_query"] = None
-
-        return base
+        # --------------------------------------
+        # 4️⃣ Direct Answer step
+        #---------------------------------------
+        if action == "direct_answer":
+            return {
+                "thought": s.get("thought"),
+                "action": "direct_answer",
+                "tool_name": None,
+                "tool_args": {},
+                "rag_query": None
+            }
