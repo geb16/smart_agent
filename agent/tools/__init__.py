@@ -2,6 +2,7 @@
 from agent.tools.math import tool_add, tool_multiply, tool_subtract, tool_divide, tool_square_root
 from agent.tools.weather import tool_weather
 from agent.tools.finance import tool_calculate_compound_interest
+from agent.tools.tool_slack_notify import tool_slack_notify
 #from agent.tools.slack_notify import tool_slack_notify
 
 TOOL_REGISTRY = {
@@ -11,6 +12,6 @@ TOOL_REGISTRY = {
     "tool_divide": tool_divide,
     "tool_square_root": tool_square_root,
     "tool_weather": tool_weather,
-    #"tool_slack_notify": tool_slack_notify,
+    "tool_slack_notify": tool_slack_notify,
     "tool_calculate_compound_interest": tool_calculate_compound_interest,
 }
