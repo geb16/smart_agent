@@ -1,20 +1,15 @@
 # agent/multi_agent.py
 
 from __future__ import annotations
-from typing import Optional
 
-from agent.planners.planner_m16 import WorkflowPlanner
-from agent.planners.planner_agent import PlannerAgent
 from agent.executors.ExecutorAgent_V24 import ExecutorAgent
-from agent.verifiers.verifier_agent import VerifierAgent
-from agent.observability.slack_notifier import SlackNotifier
-
-
-from agent.memory.short_term import ShortTermMemory
-from agent.memory.long_term import LongTermMemory
 from agent.memory.episodic import EpisodicMemory
-
-
+from agent.memory.long_term import LongTermMemory
+from agent.memory.short_term import ShortTermMemory
+from agent.observability.slack_notifier import SlackNotifier
+from agent.planners.planner_agent import PlannerAgent
+from agent.planners.planner_m16 import WorkflowPlanner
+from agent.verifiers.verifier_agent import VerifierAgent
 
 
 # --- Multi-Agent Orchestrator ---
@@ -31,15 +26,12 @@ class MultiAgentOrchestrator:
         self.executor_agent = ExecutorAgent(self.stm, self.ltm, self.epi)
         self.verifier_agent = VerifierAgent()
         self.notifier = SlackNotifier()
-        
-        
 
         from agent.integrations.slack_client import SlackClient
+
         self.slack_client = SlackClient()
 
-        
     def handle(self, user_input: str) -> str:
-
         """
         High-level orchestrator:
         1) Sanitize input
@@ -52,11 +44,11 @@ class MultiAgentOrchestrator:
         # --------------------------------------------------
         # IMPORT SAFETY AND PREFERENCE MODULES
         # --------------------------------------------------
-        
+
         from agent.memory.preference_extractor import extract_preferences
-        from agent.safety_guardrails.sanitizer import sanitize_user_input
         from agent.safety_guardrails.safety_superviser import safety_supervisor
-        
+        from agent.safety_guardrails.sanitizer import sanitize_user_input
+
         # --------------------------------------------------
         # 1️⃣ Safety gate (sanitizer)
         # --------------------------------------------------
@@ -66,10 +58,9 @@ class MultiAgentOrchestrator:
         if cleaned.startswith("⚠️"):
             # Abort pipeline immediately on unsafe input
             return cleaned
-        
+
         # Now the input is safe
         user_input = cleaned
-
 
         # --------------------------------------------------
         # 2️⃣ Extract global user preferences (only from safe input)
@@ -78,7 +69,6 @@ class MultiAgentOrchestrator:
         if extracted:
             for k, v in extracted.items():
                 self.ltm.set_pref(k, v)
-
 
         # --------------------------------------------------
         # 3️⃣ Planner: builds workflow steps using all memory
@@ -90,7 +80,6 @@ class MultiAgentOrchestrator:
             self.notifier.planner_failure(e)
             raise
 
-
         # --------------------------------------------------
         # 4️⃣ Executor: RAG + Tools execution
         # --------------------------------------------------
@@ -100,7 +89,6 @@ class MultiAgentOrchestrator:
         except Exception as e:
             self.notifier.executor_failure(e)
             raise
-
 
         # ---------------------------------------------------------------------------
         # 5️⃣ Verifier: ensures correctness + final answer(Correct or Approcve Draft)
@@ -124,23 +112,20 @@ class MultiAgentOrchestrator:
         self.notifier.final_success()
         return safe_report["final"]
 
-       
         # safe_report = {
-        # "safe": true/false, 
-        # "reason": "....", 
+        # "safe": true/false,
+        # "reason": "....",
         # "final": 2final sanitizied output"
-        # # }  
+        # # }
 
         # if not safe_report.get("safe", False):
         #     # Superviser blocks unsafe or ungrounded final answers
         #     reason = safe_report.get("reason", "Content flagged.")
         #     safe_final = safe_report.get("final", "The system cannot provide this answer safely.")
         #     return f"⚠️  Output blocked by safety supervisor:\nReason: {reason}\n{safe_final}"
-        
+
         # #Otherwise output is safe
         # return safe_report["final"]
 
-        
         # # Optional: Store episodic record
         # self.epi.store(user_input, safe_final)
-

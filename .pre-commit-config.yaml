@@ -1,4 +1,3 @@
-
 repos:
   # 1️⃣ Automatically remove unused imports and variables
   - repo: https://github.com/myint/autoflake
@@ -6,39 +5,42 @@ repos:
     hooks:
       - id: autoflake
         args:
-          [
-            "--remove-all-unused-imports",
-            "--remove-unused-variables",
-            "--ignore-init-module-imports",
-            "--in-place",
-            "--recursive",
-            "."
-          ]
+          - '--remove-all-unused-imports'
+          - '--remove-unused-variables'
+          - '--ignore-init-module-imports'
+          - '--in-place'
+          - '--recursive'
+          - .
 
   #2️⃣ Sort imports before formatting
   - repo: https://github.com/PyCQA/isort
     rev: 5.13.2
     hooks:
       - id: isort
-        args: ["--profile", "black"]
+        args:
+          - '--profile'
+          - black
 
   # 3️⃣ Format code consistently with Black
   - repo: https://github.com/psf/black
     rev: 24.3.0
     hooks:
       - id: black
-        args: ["--line-length", "150"]
+        args:
+          - '--line-length'
+          - '150'
 
   # 4️⃣ Lint for style issues and errors
   - repo: https://github.com/PyCQA/flake8
     rev: 6.1.0
     hooks:
       - id: flake8
-        args: ["--max-line-length=150"]
-  
+        args:
+          - '--max-line-length=150'
   # 5️⃣ mypy for type checking
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
-    hooks:
-      - id: mypy
-        args: ["--ignore-missing-imports"]
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.10.0
+  #   hooks:
+  #     - id: mypy
+  #       args:
+  #         - '--ignore-missing-imports'

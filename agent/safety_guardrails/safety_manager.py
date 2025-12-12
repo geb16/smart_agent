@@ -1,11 +1,12 @@
 # smart_agent/agent/safety_gardrails/safety_manager.py
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
+
 import json
-import re
 import time
-from agent.config import client, OPENAI_MODEL
+from typing import Any, Dict, List
+
+from agent.config import OPENAI_MODEL, client
 from agent.safety_guardrails.pii_cleaner import scrub_output
 
 
@@ -27,8 +28,7 @@ class SafetyManager:
     # -------------------------------------------
     def __init__(self, allowed_tools: Dict[str, bool]) -> None:
         self.allowed_tools = allowed_tools
-        self.traces: List[Dict[str, Any]] = []   # Store safety audit events
-
+        self.traces: List[Dict[str, Any]] = []  # Store safety audit events
 
     # ============================================================
     # 1) INPUT SANITIZATION (moderation + jailbreak detection)
@@ -44,12 +44,17 @@ class SafetyManager:
         cat = moderation.categories
 
         high_risk = (
-            cat.violence or cat.violence_graphic or
-            cat.self_harm or cat.self_harm_intent or cat.self_harm_planning or
-            cat.hate or cat.hate_threatening or
-            cat.harassment or
-            cat.sexual or cat.sexual_minors or
-            moderation.flagged
+            cat.violence
+            or cat.violence_graphic
+            or cat.self_harm
+            or cat.self_harm_intent
+            or cat.self_harm_planning
+            or cat.hate
+            or cat.hate_threatening
+            or cat.harassment
+            or cat.sexual
+            or cat.sexual_minors
+            or moderation.flagged
         )
 
         if high_risk:
@@ -58,9 +63,12 @@ class SafetyManager:
 
         # ---- Jailbreak / Prompt injection signals ----
         signals = [
-            "ignore previous", "override system",
-            "disable safety", "forget instructions",
-            "you are now", "system:",
+            "ignore previous",
+            "override system",
+            "disable safety",
+            "forget instructions",
+            "you are now",
+            "system:",
         ]
         lowered = text.lower()
 
@@ -69,7 +77,6 @@ class SafetyManager:
             return "⚠️ Unsafe instruction detected."
 
         return text
-
 
     # ============================================================
     # 2) TOOL SAFETY VALIDATION
@@ -85,7 +92,6 @@ class SafetyManager:
         if not allowed:
             self._log("tool_block", "Disallowed tool selected", {"tool": tool_name})
             raise ValueError(f"❌ Tool not allowed for safety: {tool_name}")
-
 
     # ============================================================
     # 3) RAG SAFETY / HALLUCINATION CHECK
@@ -110,22 +116,17 @@ class SafetyManager:
                     grounded_terms += 1
 
         if grounded_terms == 0:
-            self._log("rag_unverified", "Possible hallucination", {
-                "query": query,
-                "answer": answer,
-                "docs": docs
-            })
+            self._log("rag_unverified", "Possible hallucination", {"query": query, "answer": answer, "docs": docs})
             return False
 
         return True
-
 
     # ============================================================
     # 4) OUTPUT SAFETY (LLM-based supervisor)
     # ============================================================
     def sanitize_output(self, user_input: str, output: str) -> str:
         """LLM safety supervisor + PII scrubber."""
-        
+
         resp = client.chat.completions.create(
             model=OPENAI_MODEL,
             response_format={"type": "json_object"},
@@ -133,7 +134,7 @@ class SafetyManager:
                 {
                     "role": "system",
                     "content": """
-                    You are a safety and compliance supervisor. 
+                    You are a safety and compliance supervisor.
                     Evaluate whether the assistant's answer is safe, grounded, non-harmful,
                     non-biased, and contains no private personal data.
 
@@ -143,12 +144,9 @@ class SafetyManager:
                         "reason": "string",
                         "final": "string"
                     }
-                    """
+                    """,
                 },
-                {
-                    "role": "user",
-                    "content": json.dumps({"user": user_input, "answer": output})
-                }
+                {"role": "user", "content": json.dumps({"user": user_input, "answer": output})},
             ],
         )
 
@@ -164,7 +162,6 @@ class SafetyManager:
         # Safe → apply PII scrubbing
         cleaned = scrub_output(result["final"])
         return cleaned
-
 
     # ============================================================
     # 5) JSON SCHEMA ENFORCEMENT
@@ -183,7 +180,6 @@ class SafetyManager:
             self._log("json_invalid", f"Invalid JSON: {e}", {"content": content})
             raise ValueError(f"JSON schema violation: {e}")
 
-
     # ============================================================
     # INTERNAL TRACE LOGGER
     # ============================================================
@@ -192,12 +188,7 @@ class SafetyManager:
         Every safety-relevant event is logged with timestamp.
         Useful for auditing, debugging, or replaying agent flows.
         """
-        self.traces.append({
-            "timestamp": time.time(),
-            "event": event,
-            "message": message,
-            "data": data
-        })
+        self.traces.append({"timestamp": time.time(), "event": event, "message": message, "data": data})
 
     def get_traces(self) -> List[Dict[str, Any]]:
         """Return full safety logs for debugging or audit."""

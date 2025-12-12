@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-import json
 import inspect
-from typing import Any, Dict, List, Tuple, Optional
+import json
+from typing import Any, Dict, List, Optional, Tuple
 
-from pathlib import Path
-
-from agent.config import client, OPENAI_MODEL
-from agent.tools import TOOL_REGISTRY
-from agent.rag import RagRetriever
-from agent.planners.planner_m16 import WorkflowPlanner
+from agent.config import OPENAI_MODEL, client
 from agent.ExecutorAgent_m19 import ExecutorAgent
-
-from agent.memory.short_term import ShortTermMemory
-from agent.memory.long_term import LongTermMemory
 from agent.memory.episodic import EpisodicMemory
+from agent.memory.long_term import LongTermMemory
+from agent.memory.short_term import ShortTermMemory
+from agent.planners.planner_m16 import WorkflowPlanner
+from agent.rag import RagRetriever
+from agent.tools import TOOL_REGISTRY
 
 
 class PlannerAgent:
@@ -29,7 +26,7 @@ class PlannerAgent:
         self.epi = epi
 
     def plan(self, user_input: str, memory_text: Optional[str] = None):
-        
+
         if memory_text is None:
 
             # ---- 1. STM: short-term context ----
@@ -118,7 +115,7 @@ class ExecutorAgent_1:
             # filter args to function signature
             sig = inspect.signature(tool_fn)
             allowed = set(sig.parameters.keys())
-            #🔖
+            # 🔖
             args = {k: v for k, v in args.items() if k in allowed}
 
             # tool-specific schema fixups
@@ -203,11 +200,12 @@ class ExecutorAgent_1:
         fallback = "Workflow could not complete a valid direct answer."
         self.stm.add(user_input, fallback)
         self.epi.store_episode(
-            user_input, 
-            {"steps": steps, 
-             "results": step_results, 
-             "draft": fallback,
-             },
+            user_input,
+            {
+                "steps": steps,
+                "results": step_results,
+                "draft": fallback,
+            },
         )
         return step_results, fallback
 
@@ -237,17 +235,14 @@ class VerifierAgent:
                     "content": (
                         "You are a strict verification system for an AI agent.\n"
                         "Your response MUST be valid JSON.\n\n"
-
                         "You MUST evaluate whether the draft answer is completely grounded "
                         "in the provided workflow results.\n\n"
-
                         "GROUNDING RULES:\n"
                         "1. Any number in the final answer MUST appear in workflow_results.\n"
                         "2. Any factual statement MUST match content from RAG docs.\n"
                         "3. Any math result MUST match a tool_result.\n"
                         "4. NO new numbers, NO new facts, NO new interpretations.\n"
                         "5. If draft_answer violates grounding, you MUST correct it.\n\n"
-
                         "OUTPUT FORMAT:\n"
                         "{\n"
                         '  "approved": true|false,\n'
@@ -255,7 +250,6 @@ class VerifierAgent:
                         "}\n"
                     ),
                 },
-
                 {
                     "role": "user",
                     "content": (
@@ -271,25 +265,21 @@ class VerifierAgent:
         except Exception:
             return draft_answer  # fallback on parse error
 
-        approved = data.get("approved") 
+        approved = data.get("approved")
         # approved can be True, False, or None
         final_answer = data.get("final_answer")
 
         # CASE 1: Verifier approved → return verifier's approved answer
         if approved and final_answer:
-            return final_answer 
+            return final_answer
         # CASE 2: Verifier rejected but provided corrected answer → use corrected
         if (approved is False) and final_answer:
             # return corrected answer but warn user
-            return (
-                "Not in the tools or knowledge base. " 
-                "Based on available information, here is corrected answer:\n" + final_answer
-            )
-        
-        # CASE 3: Verifier retruned invalid payload → fallback to draft
-        return "Unable to verify the answer using available workflow results." 
+            return "Not in the tools or knowledge base. " "Based on available information, here is corrected answer:\n" + final_answer
 
-        
+        # CASE 3: Verifier retruned invalid payload → fallback to draft
+        return "Unable to verify the answer using available workflow results."
+
 
 # --- Multi-Agent Orchestrator ---
 class MultiAgentOrchestrator:
@@ -304,10 +294,8 @@ class MultiAgentOrchestrator:
         self.planner_agent = PlannerAgent(self.planner, self.stm, self.ltm, self.epi)
         self.executor_agent = ExecutorAgent(self.stm, self.ltm, self.epi)
         self.verifier_agent = VerifierAgent()
-        
-        
-    def handle(self, user_input: str) -> str:
 
+    def handle(self, user_input: str) -> str:
         """
         High-level orchestrator:
         1) Sanitize input
@@ -320,11 +308,11 @@ class MultiAgentOrchestrator:
         # --------------------------------------------------
         # IMPORT SAFETY AND PREFERENCE MODULES
         # --------------------------------------------------
-        
+
         from agent.memory.preference_extractor import extract_preferences
-        from agent.safety_guardrails.sanitizer import sanitize_user_input
         from agent.safety_guardrails.safety_superviser import safety_supervisor
-        
+        from agent.safety_guardrails.sanitizer import sanitize_user_input
+
         # --------------------------------------------------
         # 1️⃣ Safety gate (sanitizer)
         # --------------------------------------------------
@@ -334,10 +322,9 @@ class MultiAgentOrchestrator:
         if cleaned.startswith("⚠️"):
             # Abort pipeline immediately on unsafe input
             return cleaned
-        
+
         # Now the input is safe
         user_input = cleaned
-
 
         # --------------------------------------------------
         # 2️⃣ Extract global user preferences (only from safe input)
@@ -347,18 +334,15 @@ class MultiAgentOrchestrator:
             for k, v in extracted.items():
                 self.ltm.set_pref(k, v)
 
-
         # --------------------------------------------------
         # 3️⃣ Planner: builds workflow steps using all memory
         # --------------------------------------------------
         steps = self.planner_agent.plan(user_input)
 
-
         # --------------------------------------------------
         # 4️⃣ Executor: RAG + Tools execution
         # --------------------------------------------------
         workflow_results, draft = self.executor_agent.execute(user_input, steps)
-
 
         # ---------------------------------------------------------------------------
         # 5️⃣ Verifier: ensures correctness + final answer(Correct or Approcve Draft)
@@ -370,21 +354,19 @@ class MultiAgentOrchestrator:
         # --------------------------------------------------------------------------
         safe_report = safety_supervisor(user_input, final)
         # safe_report = {
-        # "safe": true/false, 
-        # "reason": "....", 
+        # "safe": true/false,
+        # "reason": "....",
         # "final": 2final sanitizied output"
-        # }  
+        # }
 
         if not safe_report.get("safe", False):
             # Superviser blocks unsafe or ungrounded final answers
             reason = safe_report.get("reason", "Content flagged.")
             safe_final = safe_report.get("final", "The system cannot provide this answer safely.")
             return f"⚠️  Output blocked by safety supervisor:\nReason: {reason}\n{safe_final}"
-        
-        #Otherwise output is safe
+
+        # Otherwise output is safe
         return safe_report["final"]
 
-        
         # Optional: Store episodic record
         # self.epi.store(user_input, final)
-

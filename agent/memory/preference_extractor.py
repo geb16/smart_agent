@@ -1,11 +1,11 @@
 # preference_extractor.py
 
 from __future__ import annotations
+
 import json
-from typing import Dict, Any, List
+from typing import Dict
 
-from agent.config import client, OPENAI_MODEL
-
+from agent.config import OPENAI_MODEL, client
 
 SYSTEM_PROMPT = """
 You extract ONLY long-term preferences that affect FUTURE interactions.
@@ -32,7 +32,6 @@ Rules:
 - Confidence MUST be between 0 and 1.
 - If none found, return: {"preferences": []}
 """
-
 
 
 def normalize_key(k: str) -> str:

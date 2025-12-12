@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
 from agent.integrations.slack_client import SlackClient
 
 
@@ -38,17 +37,20 @@ class SlackNotifier:
             text=f"❌ *Executor Failure*\n```{error}```",
             icon_emoji=":rotating_light:",
         )
+
     # ---------------- VERIFIER ----------------
     def verifier_success(self) -> None:
         self.slack.send_message(
             text="✅ *Verifier Success*\nOutput verified successfully",
             icon_emoji=":white_check_mark:",
         )
+
     def verifier_failure(self, error: Exception) -> None:
         self.slack.send_message(
             text=f"❌ *Verifier Failure*\n```{error}```",
             icon_emoji=":rotating_light:",
         )
+
     # ---------------- FINAL OUTPUT ----------------
     def final_blocked(self, reason: str) -> None:
         self.slack.send_message(
