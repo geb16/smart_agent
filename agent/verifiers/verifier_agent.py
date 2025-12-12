@@ -27,9 +27,9 @@ class VerifierAgent:
         # → core of Module 24.D
         # --------------------------------------------------
         # 24.D:🔖  - safe context truncation BEFORE sending to LLM
-        #          - Prevent overflow
+        #           - Prevent overflow
         # --------------------------------------------------
-        trancated_payload_str = truncate_json(payload)
+        truncated_payload_str = truncate_json(payload)
         
         resp = client.chat.completions.create(
             model=OPENAI_MODEL,
@@ -64,7 +64,7 @@ class VerifierAgent:
                     "role": "user",
                     "content": (
                         "Verification payload(JSON, truncated for safety):\n\n"
-                        f"{trancated_payload_str}"
+                        f"{truncated_payload_str}"
                     ),
                 },
             ],
