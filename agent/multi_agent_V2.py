@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from agent.caching_tool.cache import InMemoryAnswerCache
+from agent.caching_tool.semantic_cache import RedisSemanticCache  # 👈 New Redis feature
 from agent.executors.ExecutorAgent_V24 import ExecutorAgent
 from agent.memory.episodic import EpisodicMemory
 from agent.memory.long_term import LongTermMemory
@@ -31,6 +32,9 @@ class MultiAgentOrchestrator:
         from agent.integrations.slack_client import SlackClient
 
         self.slack_client = SlackClient()
+
+        # L2 cache for semantic retrieval
+        self.semantic_cache = RedisSemanticCache()
 
         # NEW: Low-latency L1 cache for final answers
         self.answer_cache = InMemoryAnswerCache(ttl_seconds=3600)
@@ -73,19 +77,34 @@ class MultiAgentOrchestrator:
         if extracted:
             for k, v in extracted.items():
                 self.ltm.set_pref(k, v)
+        # ------ STM (chepest , fastest) ------
 
-        current_prefs = self.ltm.all_prefs()  # 🔖 should be + stm + epi
-
-        # 2b) L1 Cache: short-circuit full pipeline on exact + prefs match
-        cached_answer = self.answer_cache.get(user_input, current_prefs)
-        if cached_answer is not None:
-            # Optional: Notify observability layer of cache hit
-            try:
-                self.notifier.cache_hit()
-            except Exception:
-                pass
+        stm_answer = self.stm.get(user_input)
+        if stm_answer:
+            if stream and on_token:
+                # Stream the cached answer token by token
+                for token in stm_answer.split():
+                    on_token(token + " ")
+            return stm_answer
+        # ------ L1 STM ANSWER CACHE CHECK ------
+        prefs_for_identity = None
+        if "temperature_unit" in self.ltm.all_prefs():
+            prefs_for_identity = {"temperature_unit": self.ltm.get_pref("temperature_unit")}
+        cached_answer = self.answer_cache.get(user_input, prefs_for_identity)
+        if cached_answer:
+            if stream and on_token:
+                # Stream the cached answer token by token
+                for token in cached_answer.split():
+                    on_token(token + " ")
             return cached_answer
-
+        # ------ L2 REDIS Semantic CACHE ------
+        semantic_answer = self.semantic_cache.get_similar(user_input)
+        if semantic_answer:
+            if stream and on_token:
+                # Stream the cached answer token by token
+                for token in semantic_answer.split():
+                    on_token(token + " ")
+            return semantic_answer
         # --------------------------------------------------
         # 3️⃣ Planner: builds workflow steps using all memory
         # --------------------------------------------------
@@ -128,11 +147,12 @@ class MultiAgentOrchestrator:
             return safe_final
         final_answer = safe_report["final"]
 
-        # Cache only safe, verifed final answers
-        self.answer_cache.set(user_input, current_prefs, final_answer)
+        # Cache the final answer in L1 and L2 caches
+        self.answer_cache._set(user_input, prefs_for_identity, final_answer)
+        self.stm.add(user_input, final_answer)
+        self.semantic_cache._set(user_input, final_answer)
 
         self.notifier.final_success()
-        return safe_report["final"]
+        return final_answer
 
-        # # Optional: Store episodic record
-        # This step is handled in exeutor agent DONE!! NO NEED TO STORE AGAIN
+        #
