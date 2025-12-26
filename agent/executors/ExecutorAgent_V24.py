@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-
-import inspect
 import asyncio
-from typing import Any, Dict, List, Tuple, Optional
+import inspect
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from agent.config import client, OPENAI_MODEL
-from agent.tools import TOOL_REGISTRY
-from agent.rag import RagRetriever
-
-from agent.memory.short_term import ShortTermMemory
-from agent.memory.long_term import LongTermMemory
+from agent.config import OPENAI_MODEL, client
 from agent.memory.episodic import EpisodicMemory
+from agent.memory.long_term import LongTermMemory
+from agent.memory.short_term import ShortTermMemory
+from agent.rag import RagRetriever
 from agent.runtime.context_utils import truncate_json
+from agent.tools import TOOL_REGISTRY
 
 
 class ExecutorAgent:
@@ -91,8 +89,9 @@ class ExecutorAgent:
         # RAG Retrieval
         if action == "rag":
             query: Optional[str] = step.get("rag_query") or user_input
-            docs = self.rag.retrieve(query)
-            return {"type": "rag", "query": query, "docs": docs}
+            safe_query: str = query if query is not None else ""
+            docs = self.rag.retrieve(safe_query)
+            return {"type": "rag", "query": safe_query, "docs": docs}
 
         # TOOL execution (single or batch)
         if action == "tool":
@@ -102,9 +101,7 @@ class ExecutorAgent:
             # Batch tool execution
             if isinstance(tool_name, list):
                 try:
-                    results = asyncio.run(
-                        self._run_tools_parallel(tool_name, args)
-                    )
+                    results = asyncio.run(self._run_tools_parallel(tool_name, args))
                 except RuntimeError:
                     # Fallback for already-running event loop
                     results = []
@@ -172,23 +169,56 @@ class ExecutorAgent:
     # -------------------------------------------------------
     # 🔹 Synthesize a Draft Answer
     # -------------------------------------------------------
-    
-    def _synthesise_draft(self, user_input: str, step_results: List[Any]) -> str:
-        
+
+    def _synthesise_draft(
+        self, user_input: str, step_results: List[Any], *, stream: bool = False, on_token: Optional[Callable[[str], None]] = None
+    ) -> str:
+        """
+        If stream=True:
+          - use OpenAI streaming to build the full answer
+          - call on_token(chunk) for every text delta, if provided
+        Otherwise:
+          - single non-streaming call (current behaviour).
+        """
+
         # combined = json.dumps(step_results, indent=2, ensure_ascii=False)
         # ↑↓Adding in runtime truncation to avoid exceeding token limits
-        
-        combined = truncate_json(step_results)
 
-        resp = client.chat.completions.create(
+        combined = truncate_json(step_results)
+        if not stream:
+            # existing non-streaming path
+
+            resp = client.chat.completions.create(
+                model=OPENAI_MODEL,
+                temperature=0.0,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You generate a draft answer based ONLY on workflow results. "
+                            "Do not invent facts or numbers not present in the results."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": f"User question:\n{user_input}\n\nWorkflow results:\n{combined}",
+                    },
+                ],
+                max_tokens=300,
+            )
+            content = resp.choices[0].message.content
+            return content.strip() if content is not None else ""
+
+        # ---- streaming path: stream tokens and accumulate full answer ----
+        chunks: List[str] = []
+        completion_stream = client.chat.completions.create(
             model=OPENAI_MODEL,
             temperature=0.0,
             messages=[
                 {
                     "role": "system",
                     "content": (
-                        "You generate a draft answer based ONLY on workflow results. "
-                        "Do not invent facts or numbers not present in the results."
+                        "You generate a draft answer based ONLY on workflow results. " "Do not invent facts or numbers not present in the results."
                     ),
                 },
                 {
@@ -197,20 +227,44 @@ class ExecutorAgent:
                 },
             ],
             max_tokens=300,
+            stream=True,  # 👈 key flag from OpenAI docs
         )
-        return resp.choices[0].message.content.strip()
+        for chunk in completion_stream:
+            choice = chunk.choices[0]
+            delta = getattr(choice.delta, "content", None)
+
+            if not delta:
+                continue
+            chunks.append(delta)
+            if on_token:
+                # push each toekn/segment to call (CLI/HTTP WebSocket)
+                on_token(delta)
+        return "".join(chunks).strip()
 
     # -------------------------------------------------------
-    # 🔹 Execute full workflow
+    # 🔹 Execute full workflow (thread streaming option)
     # -------------------------------------------------------
-    def execute(self, user_input: str, steps: List[Dict[str, Any]]) -> Tuple[List[Any], str]:
+    def execute(
+        self, user_input: str, steps: List[Dict[str, Any]], *, stream: bool = False, on_token: Optional[Callable[[str], None]] = None
+    ) -> Tuple[List[Any], str]:
+        """
+        Execut planner steps and return (step_results, draft_answer).
+        IF stream = True, the draft will be streamed token-by-token via the on_token(chunk) callback.
+        """
+        # 1) Short_term Memory instant answer check
+        stm_answer = self.stm.get(user_input) if hasattr(self.stm, "get") else None
+        if stm_answer:
+            if stream and on_token:
+                on_token(stm_answer)
+            return [], stm_answer
+
         step_results: List[Any] = []
 
         for step in steps:
             result = self._run_single_step(step, user_input)
 
             if step.get("action") == "direct_answer":
-                draft = self._synthesise_draft(user_input, step_results)
+                draft = self._synthesise_draft(user_input, step_results, stream=stream, on_token=on_token)
 
                 self.stm.add(user_input, draft)
                 self.epi.store_episode(
