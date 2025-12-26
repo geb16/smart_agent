@@ -5,9 +5,15 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
-from agent.config import client, OPENAI_MODEL
+# Import OpenAI message parameter classes
+from openai.types.chat import (
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam,
+)
 
-# Add long term memory 
+from agent.config import OPENAI_MODEL, client
+
+# Add long term memory
 from agent.memory.long_term import LongTermMemory
 
 # ---------------------------------------------------------
@@ -23,7 +29,7 @@ VALID_TOOLS = {
     "tool_slack_notify",
     "tool_calculate_compound_interest",
 }
-#🦺:Safety: explicitly allow only approved tools
+# 🦺:Safety: explicitly allow only approved tools
 ALLOWED_TOOLS = {
     "tool_add": True,
     "tool_subtract": True,
@@ -35,8 +41,6 @@ ALLOWED_TOOLS = {
     "tool_weather": True,
     # dangerous tools would be False or absent
 }
-
-
 
 
 WORKFLOW_SYSTEM_PROMPT = """
@@ -66,7 +70,7 @@ Rules:
 - ALWAYS extract numbers into tool_args.
 - Example:
   User: “what is 6 divided by 4?”
-  → 
+  →
   {
     "thought": "User asked a division question",
     "action": "tool",
@@ -76,11 +80,11 @@ Rules:
 
 - Weather → tool_weather with {"city": "..."}
 - Any tool usage MUST use: {"action": "tool", "tool_name": "..."}
-- Compound interest → 
+- Compound interest →
   {"action": "tool", "tool_name": "tool_calculate_compound_interest",
    "tool_args": {"principal": float, "rate": decimal, "times_compounded": int, "years": float}}
 
-- Any request to "notify", "send message", "alert", "ping someone", 
+- Any request to "notify", "send message", "alert", "ping someone",
   or "post update" → use:
   {
     "action": "tool",
@@ -105,31 +109,39 @@ Rules:
 """
 
 
-
 class WorkflowPlanner:
-    
+
     def __init__(self):
-        self.ltm = LongTermMemory() # For future use in plan method
+        self.ltm = LongTermMemory()  # For future use in plan method
         # include it like this: plan(user_input, memory_text)
         # where memory_text includes LTM prefs + STM history
 
     def plan(self, user_input: str, memory_text: str) -> List[Dict[str, Any]]:
 
-        
         # ✅ Load persistent user preferences
         prefs = self.ltm.all_prefs()
+        # 🔖 messages = [
+        #     {"role": "system", "content": WORKFLOW_SYSTEM_PROMPT},
+        #     # ✅ Preferences injected as policy (not chat history)
+        #     {
+        #         "role": "system",
+        #         "content": f"User persistent preferences (ALWAYS respect):\n{json.dumps(prefs, indent=2)}"
+        #     },
+
+        #     {
+        #         "role": "user",
+        #         "content": f"History:\n{memory_text}\n\nUser: {user_input}",
+        #     },
+        # ]
+
         messages = [
-            {"role": "system", "content": WORKFLOW_SYSTEM_PROMPT},
+            ChatCompletionSystemMessageParam(role="system", content=WORKFLOW_SYSTEM_PROMPT),
             # ✅ Preferences injected as policy (not chat history)
-            {
-                "role": "system",
-                "content": f"User persistent preferences (ALWAYS respect):\n{json.dumps(prefs, indent=2)}"
-            },
-            
-            {
-                "role": "user",
-                "content": f"History:\n{memory_text}\n\nUser: {user_input}",
-            },
+            ChatCompletionSystemMessageParam(role="system", content=f"User persistent preferences (ALWAYS respect):\n{json.dumps(prefs, indent=2)}"),
+            ChatCompletionUserMessageParam(
+                role="user",
+                content=f"History:\n{memory_text}\n\nUser: {user_input}",
+            ),
         ]
 
         try:
@@ -140,8 +152,11 @@ class WorkflowPlanner:
                 response_format={"type": "json_object"},
             )
 
-            data = json.loads(resp.choices[0].message.content)
-            raw_steps = data.get("steps", []) 
+            content = resp.choices[0].message.content
+            if content is None:
+                raise RuntimeError("[Planner LLM Failure] No content returned from LLM response")
+            data = json.loads(content)
+            raw_steps = data.get("steps", [])
 
         except Exception as e:
             raise RuntimeError(f"[Planner LLM Failure] {e}")
@@ -158,31 +173,32 @@ class WorkflowPlanner:
                     "rag_query": None,
                 }
             )
-       
 
         # ---------- SUPPORT QUERY FAIL-SAFE (RUNTIME OVERRIDE) ----------
         support_keywords = {
-            "return", "refund", "order", "delivery", "shipping",
-            "cancel", "complaint", "replace", "replacement",
-            "warranty", "payment", "invoice", "support"
+            "return",
+            "refund",
+            "order",
+            "delivery",
+            "shipping",
+            "cancel",
+            "complaint",
+            "replace",
+            "replacement",
+            "warranty",
+            "payment",
+            "invoice",
+            "support",
         }
 
         if any(k in user_input.lower() for k in support_keywords):
             if not any(step["action"] == "rag" for step in validated_steps):
-                validated_steps.insert(0, {
-                    "action": "rag",
-                    "tool_name": None,
-                    "tool_args": {},
-                    "rag_query": user_input
-                })
-
+                validated_steps.insert(0, {"action": "rag", "tool_name": None, "tool_args": {}, "rag_query": user_input})
 
         return validated_steps
 
-        
-
     def _validate_and_norm(self, s: Dict[str, Any]) -> Dict[str, Any]:
-        
+
         # that means if action is a tool name, convert to action: tool, tool_name: <name>
         raw_action = s.get("action")
 
@@ -202,23 +218,22 @@ class WorkflowPlanner:
                 "rag_query": rag_query,
             }
 
-
         # -----------------------------------------------------------------
         # 1️⃣ Normaize "tool_xxx" action → ("tool", tool_name)
         # -----------------------------------------------------------------
         if raw_action in VALID_TOOLS:
             s["tool_name"] = raw_action
             s["action"] = "tool"
-        
+
         # -----------------------------------------------------------------
         # 2️⃣ Re-read normalized action + validate
         # -----------------------------------------------------------------
-        action = s.get("action") # ✅ RE-READ normalized action
-        
-        #✅ Now validate correctly
+        action = s.get("action")  # ✅ RE-READ normalized action
+
+        # ✅ Now validate correctly
         if action not in VALID_ACTIONS:
             raise ValueError(f"Invalid action from planner: {action}")
-        
+
         # ----------------------------------------------------------------
         # 3️⃣ 🦺 Tool safety checks(only if tool step)
         # ----------------------------------------------------------------
@@ -228,31 +243,28 @@ class WorkflowPlanner:
             # ---- Ensure the planner provided a tool_name ---
             if not tool_name:
                 raise ValueError("Tool step missing tool_name")
-            
+
             # ---- Ensure tools exists in the system -----
             if tool_name not in VALID_TOOLS:
                 raise ValueError(f"Unknown tool requested: {tool_name}")
-            
+
             # ---- Ensure tool is explicitly allowed for safety -----
-            if not ALLOWED_TOOLS.get(tool_name, False): 
+            if not ALLOWED_TOOLS.get(tool_name, False):
                 raise ValueError(f"Disallowed tool selected by planner: {tool_name}")
 
             return {
-                "thought": s.get("thought"), # This preserves reasoning for logging/debugging
+                "thought": s.get("thought"),  # This preserves reasoning for logging/debugging
                 "action": "tool",
                 "tool_name": tool_name,
                 "tool_args": s.get("tool_args") or {},
-                "rag_query": None
+                "rag_query": None,
             }
 
         # --------------------------------------
         # 4️⃣ Direct Answer step
-        #---------------------------------------
+        # ---------------------------------------
         if action == "direct_answer":
-            return {
-                "thought": s.get("thought"),
-                "action": "direct_answer",
-                "tool_name": None,
-                "tool_args": {},
-                "rag_query": None
-            }
+            return {"thought": s.get("thought"), "action": "direct_answer", "tool_name": None, "tool_args": {}, "rag_query": None}
+
+        # If none of the above conditions matched, raise an error to ensure all code paths return
+        raise ValueError(f"Unhandled action type in _validate_and_norm: {action}")
