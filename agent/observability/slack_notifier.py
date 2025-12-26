@@ -63,3 +63,10 @@ class SlackNotifier:
             text="✅ *Final Output Delivered Successfully*",
             icon_emoji=":white_check_mark:",
         )
+
+    # cache hit/miss could also be notified here
+    def cache_hit(self) -> None:
+        self.slack.send_message(
+            text="🗃️ *Cache Hit*\nReturned answer from cache",
+            icon_emoji=":file_cabinet:",
+        )
