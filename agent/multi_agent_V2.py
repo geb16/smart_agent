@@ -77,33 +77,38 @@ class MultiAgentOrchestrator:
         if extracted:
             for k, v in extracted.items():
                 self.ltm.set_pref(k, v)
-        # ------ STM (chepest , fastest) ------
 
+        # 2.1 ------ STM (chepest , fastest) ------
         stm_answer = self.stm.get(user_input)
         if stm_answer:
             if stream and on_token:
                 # Stream the cached answer token by token
                 for token in stm_answer.split():
                     on_token(token + " ")
+            self.notifier.cache_hit("STM")
             return stm_answer
-        # ------ L1 STM ANSWER CACHE CHECK ------
+        # 2.2------ L1 EXACT CACHE (In-Memory with Pref Identity) ------
         prefs_for_identity = None
         if "temperature_unit" in self.ltm.all_prefs():
             prefs_for_identity = {"temperature_unit": self.ltm.get_pref("temperature_unit")}
+
         cached_answer = self.answer_cache.get(user_input, prefs_for_identity)
         if cached_answer:
             if stream and on_token:
                 # Stream the cached answer token by token
                 for token in cached_answer.split():
                     on_token(token + " ")
+            self.notifier.cache_hit("L1")
             return cached_answer
-        # ------ L2 REDIS Semantic CACHE ------
+
+        # 2.3 ------ L2 Semantic CACHE (Redis/cosine) ------
         semantic_answer = self.semantic_cache.get_similar(user_input)
         if semantic_answer:
             if stream and on_token:
                 # Stream the cached answer token by token
                 for token in semantic_answer.split():
                     on_token(token + " ")
+            self.notifier.cache_hit("L2")
             return semantic_answer
         # --------------------------------------------------
         # 3️⃣ Planner: builds workflow steps using all memory
@@ -154,5 +159,3 @@ class MultiAgentOrchestrator:
 
         self.notifier.final_success()
         return final_answer
-
-        #
