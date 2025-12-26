@@ -2,20 +2,17 @@
 
 from __future__ import annotations
 
-import json
 import inspect
-from typing import Any, Dict, List, Tuple, Optional
+import json
+from typing import Any, Dict, List, Optional, Tuple
 
-
-
-from agent.config import client, OPENAI_MODEL
-from agent.tools import TOOL_REGISTRY
-from agent.rag import RagRetriever
-
-
-from agent.memory.short_term import ShortTermMemory
-from agent.memory.long_term import LongTermMemory
+from agent.config import OPENAI_MODEL, client
 from agent.memory.episodic import EpisodicMemory
+from agent.memory.long_term import LongTermMemory
+from agent.memory.short_term import ShortTermMemory
+from agent.rag import RagRetriever
+from agent.tools import TOOL_REGISTRY
+
 
 # --- Executor Agent ---
 class ExecutorAgent:
@@ -87,7 +84,10 @@ class ExecutorAgent:
             ],
         )
 
-        repaired = json.loads(resp.choices[0].message.content)
+        content = resp.choices[0].message.content
+        if content is None:
+            raise ValueError("LLM response content is None and cannot be parsed as JSON.")
+        repaired = json.loads(content)
 
         if repaired.get("action") == "skip":
             return None
@@ -109,6 +109,8 @@ class ExecutorAgent:
         # ---- RAG ----
         if action == "rag":
             query: Optional[str] = step.get("rag_query") or user_input
+            if query is None:
+                query = ""
             docs = self.rag.retrieve(query)
             return {
                 "type": "rag",
@@ -121,7 +123,7 @@ class ExecutorAgent:
             name: Optional[str] = (step.get("tool_name") or "").strip()
             args: Dict[str, Any] = step.get("tool_args") or {}
 
-            tool_fn = TOOL_REGISTRY.get(name)
+            tool_fn = TOOL_REGISTRY.get(name if name is not None else "")
             if not tool_fn:
                 return {
                     "type": "tool_error",
@@ -182,10 +184,7 @@ class ExecutorAgent:
             messages=[
                 {
                     "role": "system",
-                    "content": (
-                        "Generate a draft ONLY from workflow tool results and RAG."
-                        "Do NOT invent facts."
-                    ),
+                    "content": ("Generate a draft ONLY from workflow tool results and RAG." "Do NOT invent facts."),
                 },
                 {
                     "role": "user",
@@ -193,7 +192,10 @@ class ExecutorAgent:
                 },
             ],
         )
-        return resp.choices[0].message.content.strip()
+        content = resp.choices[0].message.content
+        if content is None:
+            return ""
+        return content.strip()
 
     # ---------------------------------------------------------
     # MAIN EXECUTION LOOP (Now Adaptive – Module 19)
