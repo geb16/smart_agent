@@ -25,10 +25,9 @@ class InMemoryAnswerCache:
         self._store: Dict[str, CacheEntry] = {}
 
     def _make_key(self, user_input: str, prefs: Optional[dict]) -> str:
-        payload = {
-            "q": user_input.strip(),
-            "prefs": prefs or {},
-        }
+        payload = {"q": user_input.strip()}
+        if prefs:  # only include when it changesthe output
+            payload["prefs"] = json.dumps(prefs, sort_keys=True)
         raw = json.dumps(payload, sort_keys=True)
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -42,6 +41,6 @@ class InMemoryAnswerCache:
             return None
         return entry.value
 
-    def set(self, user_input: str, prefs: Optional[dict], value: str) -> None:
+    def _set(self, user_input: str, prefs: Optional[dict], value: str) -> None:
         key = self._make_key(user_input, prefs)
         self._store[key] = CacheEntry(value=value, created_at=time.time())
