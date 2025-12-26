@@ -1,3 +1,7 @@
+# .pre-commit-config.yaml
+# This configuration file sets up pre-commit hooks for a Python project.
+# autoflake → isort → black → flake8 → mypy
+
 repos:
   # 1️⃣ Automatically remove unused imports and variables
   - repo: https://github.com/myint/autoflake
@@ -35,6 +39,10 @@ repos:
     rev: 6.1.0
     hooks:
       - id: flake8
+        # additional_dependencies:
+        #   - flake8-bugbear
+        #   - flake8-comprehensions
+        #   - flake8-builtins
         args:
           - '--max-line-length=150'
   # 5️⃣ mypy for type checking
