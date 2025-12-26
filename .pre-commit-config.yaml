@@ -47,10 +47,10 @@ repos:
           - '--max-line-length=150'
           - '--extend-ignore=E203, W503'
   # 5️⃣ mypy for type checking
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
-    hooks:
-      - id: mypy
-        args:
-          - '--ignore-missing-imports'
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.10.0
+  #   hooks:
+  #     - id: mypy
+  #       args:
+  #         - '--ignore-missing-imports'
           

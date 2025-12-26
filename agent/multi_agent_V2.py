@@ -1,7 +1,8 @@
-# agent/multi_agent.py
+# agent/multi_agent_V2.py
 
 from __future__ import annotations
 
+from agent.caching_tool.cache import InMemoryAnswerCache
 from agent.executors.ExecutorAgent_V24 import ExecutorAgent
 from agent.memory.episodic import EpisodicMemory
 from agent.memory.long_term import LongTermMemory
@@ -31,7 +32,10 @@ class MultiAgentOrchestrator:
 
         self.slack_client = SlackClient()
 
-    def handle(self, user_input: str) -> str:
+        # NEW: Low-latency L1 cache for final answers
+        self.answer_cache = InMemoryAnswerCache(ttl_seconds=3600)
+
+    def handle(self, user_input: str, *, stream: bool = False, on_token=None) -> str:
         """
         High-level orchestrator:
         1) Sanitize input
@@ -70,6 +74,18 @@ class MultiAgentOrchestrator:
             for k, v in extracted.items():
                 self.ltm.set_pref(k, v)
 
+        current_prefs = self.ltm.all_prefs()  # 🔖 should be + stm + epi
+
+        # 2b) L1 Cache: short-circuit full pipeline on exact + prefs match
+        cached_answer = self.answer_cache.get(user_input, current_prefs)
+        if cached_answer is not None:
+            # Optional: Notify observability layer of cache hit
+            try:
+                self.notifier.cache_hit()
+            except Exception:
+                pass
+            return cached_answer
+
         # --------------------------------------------------
         # 3️⃣ Planner: builds workflow steps using all memory
         # --------------------------------------------------
@@ -84,7 +100,7 @@ class MultiAgentOrchestrator:
         # 4️⃣ Executor: RAG + Tools execution
         # --------------------------------------------------
         try:
-            workflow_results, draft = self.executor_agent.execute(user_input, steps)
+            workflow_results, draft = self.executor_agent.execute(user_input, steps, stream=stream, on_token=on_token)
             self.notifier.executor_success()
         except Exception as e:
             self.notifier.executor_failure(e)
@@ -107,25 +123,16 @@ class MultiAgentOrchestrator:
         if not safe_report.get("safe", False):
             reason = safe_report.get("reason", "Unknown reason")
             self.notifier.final_blocked(reason)
-            return safe_report.get("final")
+            safe_final = safe_report.get("final", final)
+            # do NOT cache blocked answers
+            return safe_final
+        final_answer = safe_report["final"]
+
+        # Cache only safe, verifed final answers
+        self.answer_cache.set(user_input, current_prefs, final_answer)
 
         self.notifier.final_success()
         return safe_report["final"]
 
-        # safe_report = {
-        # "safe": true/false,
-        # "reason": "....",
-        # "final": 2final sanitizied output"
-        # # }
-
-        # if not safe_report.get("safe", False):
-        #     # Superviser blocks unsafe or ungrounded final answers
-        #     reason = safe_report.get("reason", "Content flagged.")
-        #     safe_final = safe_report.get("final", "The system cannot provide this answer safely.")
-        #     return f"⚠️  Output blocked by safety supervisor:\nReason: {reason}\n{safe_final}"
-
-        # #Otherwise output is safe
-        # return safe_report["final"]
-
         # # Optional: Store episodic record
-        # self.epi.store(user_input, safe_final)
+        # This step is handled in exeutor agent DONE!! NO NEED TO STORE AGAIN
