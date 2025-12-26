@@ -1,11 +1,12 @@
+import json
+import uuid
+from datetime import datetime
+from pathlib import Path
+
 import chromadb
 from chromadb.config import Settings
-from agent.config import client, EMBEDDING_MODEL
 
-import uuid
-import json
-from pathlib import Path
-from datetime import datetime
+from agent.config import EMBEDDING_MODEL, client
 
 # ---------------- MEMORY ROOT -----------------------
 BASE_DIR = Path(__file__).resolve().parent
@@ -33,7 +34,7 @@ class LongTermMemory:
 
         try:
             self.collection = self.client.get_collection(collection)
-        except:
+        except Exception:
             self.collection = self.client.create_collection(collection)
 
         self.prefs = self._load_prefs()
@@ -41,47 +42,29 @@ class LongTermMemory:
     # ---------------- Vector Memory -------------------
 
     def embed(self, text: str):
-        resp = client.embeddings.create(
-            model=EMBEDDING_MODEL,
-            input=text
-        )
+        resp = client.embeddings.create(model=EMBEDDING_MODEL, input=text)
         return resp.data[0].embedding
 
     def add(self, text: str, metadata=None):
         emb = self.embed(text)
 
-        final_meta = {
-            "timestamp": datetime.utcnow().isoformat(),
-            **(metadata or {})
-        }
+        final_meta = {"timestamp": datetime.utcnow().isoformat(), **(metadata or {})}
 
-        self.collection.add(
-            ids=[str(uuid.uuid4())],
-            documents=[text],
-            embeddings=[emb],
-            metadatas=[final_meta]
-        )
+        self.collection.add(ids=[str(uuid.uuid4())], documents=[text], embeddings=[emb], metadatas=[final_meta])
 
     def recall(self, query: str, k=3, min_relevance=0.3) -> list:
         """Return list of semantically matching strings."""
         q_emb = self.embed(query)
 
-        res = self.collection.query(
-            query_embeddings=[q_emb],
-            n_results=k,
-            include=["documents", "distances", "metadatas"]
-        )
+        res = self.collection.query(query_embeddings=[q_emb], n_results=k, include=["documents", "distances", "metadatas"])
 
-        docs = res.get("documents", [[]])[0]
-        dists = res.get("distances", [[]])[0]
+        docs = (res.get("documents") or [[]])[0]
+        dists = (res.get("distances") or [[]])[0]
 
         if not docs:
             return []
 
-        return [
-            docs[i] for i, dist in enumerate(dists)
-            if dist <= min_relevance
-        ]
+        return [docs[i] for i, dist in enumerate(dists) if dist <= min_relevance]
 
     # ---------------- Preferences Layer ----------------
 
@@ -89,7 +72,7 @@ class LongTermMemory:
         if PREF_FILE.exists():
             try:
                 return json.loads(PREF_FILE.read_text())
-            except:
+            except Exception:
                 return {}
         return {}
 
@@ -112,7 +95,7 @@ class LongTermMemory:
 
 
 # ------------------------------------------------------------
-# Clarification 
+# Clarification
 # how to use add() and recall()
 # ------------------------------------------------------------
 # ltm = LongTermMemory()
