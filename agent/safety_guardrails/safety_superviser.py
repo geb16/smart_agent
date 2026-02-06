@@ -1,8 +1,7 @@
 # agent/safety_gardrails/safety_superviser.py
-from agent.config import client, OPENAI_MODEL
-
 import json
 
+from agent.config import OPENAI_MODEL, client
 
 
 # Safety Supervisor to check final answers
@@ -23,15 +22,12 @@ Return STRICT JSON:
    "reason": "string",
    "final": "string"
 }
-"""
+""",
             },
-            {
-                "role": "user",
-                "content": json.dumps({"user": user_input, "answer": final_answer})
-            }
-        ]
+            {"role": "user", "content": json.dumps({"user": user_input, "answer": final_answer})},
+        ],
     )
-    return json.loads(resp.choices[0].message.content)
+    return json.loads(resp.choices[0].message.content or "{}")
 
 
 # Example usage:
