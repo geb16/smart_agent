@@ -1,7 +1,9 @@
 from __future__ import annotations
-from agent.config import client, OPENAI_MODEL
+
+from agent.config import OPENAI_MODEL, client
 
 # 🔖🈁🔴 For later use
+
 
 # --- Suggestion Agent ---
 class SuggestionAgent:
@@ -38,10 +40,7 @@ class SuggestionAgent:
         Do NOT complete the whole query, just offer a subtle suggestion.
         """
 
-        resp = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            temperature=0.0,
-            messages=[{"role": "system", "content": prompt}]
-        )
+        resp = client.chat.completions.create(model=OPENAI_MODEL, temperature=0.0, messages=[{"role": "system", "content": prompt}])
 
-        return resp.choices[0].message.content.strip()
+        content = resp.choices[0].message.content
+        return content.strip() if content else ""
