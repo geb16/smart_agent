@@ -8,9 +8,9 @@ import os
 from dataclasses import dataclass
 from typing import List, Optional
 
-import redis  # pip install redis
+import redis
 
-from agent.config import client  # your OpenAI client (already used elsewhere)
+from agent.config import client
 
 # ------------------- Config -------------------
 
@@ -161,3 +161,8 @@ class RedisSemanticCache:
         if na == 0.0 or nb == 0.0:
             return -1.0
         return dot / (math.sqrt(na) * math.sqrt(nb))
+
+
+# to use redis semantic cache:
+# run docker run  -it -p 6379:6379 redis:latest
+#  -it for interactive terminal, meaning
