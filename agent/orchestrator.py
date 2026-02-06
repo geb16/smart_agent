@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from agent.caching_tool.cache import InMemoryAnswerCache
 from agent.caching_tool.semantic_cache import RedisSemanticCache  # 👈 New Redis feature
-from agent.executors.ExecutorAgent_V24 import ExecutorAgent
+from agent.executors.ExecutorAgent import ExecutorAgent
 from agent.memory.episodic import EpisodicMemory
 from agent.memory.long_term import LongTermMemory
 from agent.memory.short_term import ShortTermMemory
