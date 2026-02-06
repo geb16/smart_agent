@@ -12,8 +12,8 @@ from agent.config import EMBEDDING_MODEL, client
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-DB_DIR = PROJECT_ROOT / "smart_agent" / "rag_db"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DB_DIR = (PROJECT_ROOT / "rag_db").resolve()
 COLLECTION_NAME = "docs"
 
 
@@ -49,8 +49,11 @@ class RagRetriever:
         """
         self.min_relevance = min_relevance
 
+        if not DB_DIR.exists():
+            DB_DIR.mkdir(parents=True, exist_ok=True)
+            logger.info(f"[RAG INFO] Created DB directory at {DB_DIR}")
         self._client = chromadb.PersistentClient(
-            path=DB_DIR,
+            path=str(DB_DIR),
             settings=Settings(anonymized_telemetry=False),
         )
 
