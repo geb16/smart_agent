@@ -1,10 +1,11 @@
 # agent/memory/episodic.py
 from __future__ import annotations
-import uuid
+
 import json
+import uuid
 from datetime import datetime
 
-from agent.config import client, OPENAI_MODEL
+from agent.config import OPENAI_MODEL, client
 from agent.memory.long_term import LongTermMemory
 
 
@@ -15,14 +16,11 @@ class EpisodicMemory:
 
     def __init__(self):
         # ALWAYS anchor inside memory_db/
-        self.store = LongTermMemory(
-            collection="episodic_memories"
-        )
+        self.store = LongTermMemory(collection="episodic_memories")
 
     # ============================================================
     # STORE EPISODE
     # ============================================================
-    
 
     def store_episode(self, user_input: str, episode: dict) -> dict:
         """
@@ -37,11 +35,7 @@ class EpisodicMemory:
         """
         steps = episode.get("steps", [])
 
-        tools = [
-            s.get("tool_name")
-            for s in steps 
-            if isinstance(s, dict) and s.get("action") == "tool"
-        ]
+        tools = [s.get("tool_name") for s in steps if isinstance(s, dict) and s.get("action") == "tool"]
 
         # 🔁 UPDATED: accept either "final" or "draft"
         final_answer = episode.get("final") or episode.get("draft")
@@ -51,7 +45,7 @@ class EpisodicMemory:
             "timestamp": datetime.utcnow().isoformat(),
             "user_input": user_input,
             "steps": steps,
-            "results": episode.get("results", []),   # 🔧 NEW: keep raw results if present
+            "results": episode.get("results", []),  # 🔧 NEW: keep raw results if present
             "final_answer": final_answer,
             "verifier_status": episode.get("verifier_status", "unknown"),
             "tools_used": tools,
@@ -62,7 +56,6 @@ class EpisodicMemory:
 
         return record
 
-    
     # ============================================================
     # SUMMARIZATION
     # ============================================================
@@ -82,11 +75,7 @@ class EpisodicMemory:
             - Capture ONLY user intent and final factual result.
         """
 
-        resp = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            temperature=0.0,
-            messages=[{"role": "system", "content": prompt}]
-        )
+        resp = client.chat.completions.create(model=OPENAI_MODEL, temperature=0.0, messages=[{"role": "system", "content": prompt}])
 
         return resp.choices[0].message.content.strip()
 
@@ -101,4 +90,3 @@ class EpisodicMemory:
     def recall_recent(self, n: int = 3):
         """Reserved for future chronological memory tracking."""
         return []
-
