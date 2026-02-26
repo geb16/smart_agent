@@ -3,3 +3,8 @@ chromadb
 tiktoken
 python-dotenv
 requests
+redis
+
+# Optional: mock Slack webhook server for local testing
+fastapi
+uvicorn
