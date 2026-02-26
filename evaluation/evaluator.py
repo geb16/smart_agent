@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from agent.executors.ExecutorAgent import ExecutorAgent
+from agent.memory.episodic import EpisodicMemory
 from agent.memory.long_term import LongTermMemory
 from agent.memory.preference_extractor import extract_preferences
 from agent.memory.short_term import ShortTermMemory
@@ -26,7 +27,7 @@ TEST_CASES_PATH = BASE_DIR / "test_cases.json"
 LOG_PATH = BASE_DIR / "logs" / "evaluation_log.jsonl"
 
 
-class NullEpisodicMemory:
+class NullEpisodicMemory(EpisodicMemory):
     """No-op episodic memory for evaluator runs to avoid side effects."""
 
     def retrieve_similar(self, query: str, k: int = 3) -> List[str]:
@@ -44,7 +45,12 @@ def _load_test_cases() -> List[Dict[str, Any]]:
 def _first_step_or_default(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
     if steps and isinstance(steps[0], dict):
         return steps[0]
-    return {"action": "unknown", "tool_name": None, "tool_args": {}, "rag_query": None}
+    return {
+        "action": "unknown",
+        "tool_name": None,
+        "tool_args": {},
+        "rag_query": None,
+    }
 
 
 def run_evaluation() -> List[Dict[str, Any]]:
@@ -76,7 +82,14 @@ def run_evaluation() -> List[Dict[str, Any]]:
 
         # 2) Plan + execute + verify if input is safe
         if cleaned_input.startswith("⚠️"):
-            steps = [{"action": "blocked", "tool_name": None, "tool_args": {}, "rag_query": None}]
+            steps = [
+                {
+                    "action": "blocked",
+                    "tool_name": None,
+                    "tool_args": {},
+                    "rag_query": None,
+                }
+            ]
             final = cleaned_input
         else:
             # Extract and persist user preferences
@@ -90,7 +103,14 @@ def run_evaluation() -> List[Dict[str, Any]]:
             try:
                 steps = planner_agent.plan(cleaned_input, memory_text=stm.as_text())
             except Exception as exc:
-                steps = [{"action": "rag", "tool_name": None, "tool_args": {}, "rag_query": cleaned_input}]
+                steps = [
+                    {
+                        "action": "rag",
+                        "tool_name": None,
+                        "tool_args": {},
+                        "rag_query": cleaned_input,
+                    }
+                ]
                 workflow_results.append({"type": "planning_error", "error": str(exc)})
 
             try:
@@ -107,7 +127,10 @@ def run_evaluation() -> List[Dict[str, Any]]:
 
             try:
                 safe_report = safety_supervisor(cleaned_input, verified)
-                final = safe_report.get("final", verified) if isinstance(safe_report, dict) else verified
+                if isinstance(safe_report, dict):
+                    final = safe_report.get("final", verified)
+                else:
+                    final = verified
             except Exception:
                 final = verified
 
@@ -121,7 +144,10 @@ def run_evaluation() -> List[Dict[str, Any]]:
             "input": user_input,
             "expected_action": test.get("expected_action"),
             "actual_action": first_step.get("action"),
-            "action_score": check_action(test.get("expected_action"), first_step.get("action")),
+            "action_score": check_action(
+                test.get("expected_action"),
+                first_step.get("action"),
+            ),
             "expected_tool": test.get("expected_tool"),
             "tool_score": check_tool(test.get("expected_tool"), first_step),
             "final_answer": final,
@@ -139,4 +165,4 @@ def run_evaluation() -> List[Dict[str, Any]]:
 if __name__ == "__main__":
     output = run_evaluation()
     for row in output:
-        print(f"Test {row['id']}: action={row['action_score']}, tool={row['tool_score']}, answer={row['final_answer_score']}")
+        print(f"Test {row['id']}: action={row['action_score']}, " f"tool={row['tool_score']}, answer={row['final_answer_score']}")
