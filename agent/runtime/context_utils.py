@@ -2,14 +2,15 @@
 
 import json
 
-# You can tune this if needed
+# This can be tuned as needed based on typical LLM input limits and
+# expected memory sizes.
 MAX_CONTEXT_CHARS = 12000
 
 
 def truncate_json(payload, max_chars: int = MAX_CONTEXT_CHARS) -> str:
     """
-    Convert `payload` to pretty JSON (like json.dumps(..., indent=2, ensure_ascii=False)),
-    but:
+    Convert `payload` to pretty JSON (like json.dumps with indent=2 and
+    ensure_ascii=False), but:
       - Never crashes on non-serializable objects
       - Always returns a string
       - Truncates to the last `max_chars` characters if too long.
