@@ -1,92 +1,128 @@
-Smart Agent
+# Smart Agent
 
-Production-ready, modular workflow agent for planning and executing tasks. This package is organized for clarity and testability, with clean separation between core agent logic, planning, tools, evaluation, and configuration.
+Multi-agent workflow system for grounded responses using:
 
-Package Structure
-- smart_agent/
-	- agent/
-		- planner.py: Converts user requests + short-term memory into actionable workflow steps.
-		- agent_core.py: Orchestrates planning, tool selection, and execution loop; exposes WorkflowAgent.
-	- tools/: Concrete tool wrappers (APIs, filesystem, models).
-	- memory/: Short-term and long-term memory abstractions; supports agent.stm.
-	- evaluation/
-		- evaluator.py: Batch evaluation runner for test cases.
-		- metrics.py: Scoring utilities used by evaluator.
-	- config/: Defaults and environment variable settings.
+- Planner -> Executor -> Verifier orchestration
+- Hybrid memory (short-term, long-term, episodic)
+- RAG over local ChromaDB
+- Tooling (math, weather, finance, Slack notify)
+- Multi-layer caching (STM, in-memory L1, Redis semantic L2)
+- Safety checks before and after generation
 
-Installation
-Recommended: install in editable mode inside a virtual environment.
+## Repository Tree
+
+```text
+smart_agent/
+|-- agent/
+|   |-- orchestrator.py
+|   |-- config.py
+|   |-- rag.py
+|   |-- autonomy/
+|   |-- caching_tool/
+|   |-- executors/
+|   |-- integrations/
+|   |-- memory/
+|   |-- observability/
+|   |-- planners/
+|   |-- runtime/
+|   |-- safety_guardrails/
+|   |-- tools/
+|   |-- utilities/
+|   `-- verifiers/
+|-- data/
+|   `-- documents.txt
+|-- evaluation/
+|   |-- evaluator.py
+|   |-- metrics.py
+|   |-- test_cases.json
+|   `-- logs/
+|-- slack_server/
+|   |-- slack_server.py
+|   `-- mock_slack_server.py
+|-- memory_db/
+|-- rag_db/
+|-- main.py
+|-- rag_prep.py
+|-- requirements.txt
+|-- pyproject.toml
+`-- README.md
+```
+
+## Prerequisites
+
+- Python 3.10+ (repo CI runs on 3.9-3.11; `pyproject.toml` currently says `>=3.13`)
+- Redis (required by current orchestrator path)
+- OpenAI API key
+- Slack webhook URL (required by current `SlackClient` initialization)
+
+## Setup
 
 ```powershell
-# From level2/module17
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install -e .
+pip install -r requirements.txt
 ```
 
-Run
-Use module execution so imports resolve consistently.
+Create `.env` in project root:
+
+```dotenv
+OPENAI_API_KEY=...
+SLACK_WEBHOOK_URL=...
+REDIS_URL=redis://localhost:6379/0
+OPENWEATHER_API_KEY=...  # optional, only for weather tool
+EMBED_MODEL=text-embedding-3-small
+SEMANTIC_CACHE_THRESHOLD=0.90
+SEMANTIC_CACHE_MAX_CANDIDATES=50
+```
+
+## Prepare Knowledge Base (RAG)
+
+1. Put source text in `data/documents.txt`
+2. Build embeddings and Chroma DB:
 
 ```powershell
-# From level2/module17
-python -m smart_agent.evaluation.evaluator
+python rag_prep.py
 ```
 
-Alternatively, when running directly from smart_agent/:
+This populates `rag_db/` used by `agent/rag.py`.
+
+## Run
+
+Start Redis first (example with Docker):
 
 ```powershell
-$env:PYTHONPATH = "E:\AWS\rag_finetune\level2\module17"
-python smart_agent\evaluation\evaluator.py
+docker run --name smart-agent-redis -p 6379:6379 -d redis:latest
 ```
 
-Quick Start (Code)
-```python
-from smart_agent.agent.planner import WorkflowPlanner
-from smart_agent.agent.agent_core import WorkflowAgent
+Run the agent:
 
-planner = WorkflowPlanner()
-agent = WorkflowAgent(planner)
-
-answer = agent.handle("Summarize weekly progress and email the team")
-print(answer)
-```
-
-Design Principles
-- Modularity: Planner, agent loop, tools, memory, and evaluation are separate modules.
-- Deterministic Planning: WorkflowPlanner.plan(input, memory) returns explicit steps with action, optional tool, and arguments.
-- Tool Contracts: Each tool exposes a simple run(params) interface with clear inputs/outputs.
-- Memory Abstractions: agent.stm (short-term memory) provides recent context for planning; extend with LTM for persistence.
-- Evaluation-first: evaluation/test_cases.json and evaluation/evaluator.py provide reproducible scoring.
-
-Evaluation
-Place test cases in smart_agent/evaluation/test_cases.json:
-```json
-[
-	{
-		"id": 1,
-		"input": "Find meeting notes and summarize",
-		"expected_action": "summarize",
-		"expected_tool": "notes.search",
-		"expected_final_contains": "summary"
-	}
-]
-```
-Run the evaluator:
 ```powershell
-python -m smart_agent.evaluation.evaluator
+python main.py
 ```
-Results are appended to smart_agent/evaluation/logs/evaluation_log.jsonl.
 
-Conventions
-- Imports: Use absolute imports (from smart_agent.agent...) for reliability.
-- Config: Read environment variables via dotenv or os.environ in config/.
-- Logging: Prefer module-level logger = logging.getLogger(__name__).
+Run evaluation:
 
-Troubleshooting
-- ModuleNotFoundError: Run with python -m smart_agent... or set PYTHONPATH to the module root.
-- VS Code imports: Select the correct interpreter (the .venv) and ensure the workspace root matches the module root.
-- Editable install: Use pip install -e . at the module root if pyproject.toml is present.
+```powershell
+python evaluation/evaluator.py
+```
 
+## Runtime Flow
 
+For each request, the orchestrator performs:
 
+1. Input sanitization/moderation
+2. Preference extraction
+3. Cache lookup (STM -> L1 -> L2)
+4. Planning
+5. Execution (tools/RAG)
+6. Verification
+7. Final safety check
+8. Memory and cache updates
 
+## Deployment Notes
+
+- Treat this service as a stateful worker process (it is CLI-based, not HTTP API-first).
+- Externalize secrets via your platform secret manager (never commit `.env`).
+- Use managed Redis in production and set `REDIS_URL` accordingly.
+- Persist or volume-mount `rag_db/` and memory store paths if you need continuity across restarts.
+- Add process supervision (systemd/PM2/container restart policy) and central logging.
