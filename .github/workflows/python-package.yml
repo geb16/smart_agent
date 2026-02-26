@@ -43,4 +43,4 @@ jobs:
           SLACK_WEBHOOK_URL: https://example.com/mock
           REDIS_URL: redis://localhost:6379/0
         run: |
-          pytest -q tests/unit --maxfail=1
+          python -m pytest -q tests/unit --maxfail=1
